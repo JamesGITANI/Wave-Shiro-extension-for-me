@@ -3,12 +3,11 @@
     "id": "wave-shiro-extension",
     "name": "Wave Shiro Extension",
     "version": "0.1.0",
-    "main": "sources/my-legal-anime",
+    "main": "https://raw.githubusercontent.com/JamesGITANI/Wave-Shiro-extension-for-me/main/shiru/sources/my-legal-anime.js",
     "update": "https://raw.githubusercontent.com/JamesGITANI/Wave-Shiro-extension-for-me/main/shiru/index.json",
     "type": "torrent",
     "speed": "fast",
     "accuracy": "high",
-    "description": "Personal Shiru source.",
-    "icon": "https://raw.githubusercontent.com/JamesGITANI/Wave-Shiro-extension-for-me/main/shiru/icon.png"
+    "description": "Personal Shiru source."
   }
 ]

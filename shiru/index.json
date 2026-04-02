@@ -3,7 +3,7 @@
     "id": "wave-shiro-extension",
     "name": "WaveShiroExtension",
     "version": "0.1.0",
-    "main": "sources/my-legal-anime",
+    "main": "sources/my-legal-anime.js",
     "type": "torrent",
     "nsfw": false,
     "description": "Personal Shiru source.",

@@ -1,7 +1,7 @@
 [
   {
     "id": "wave-shiro-extension",
-    "name": "Wave Shiro Extension",
+    "name": "WaveShiroExtension",
     "version": "0.1.0",
     "main": "https://raw.githubusercontent.com/JamesGITANI/Wave-Shiro-extension-for-me/main/shiru/sources/my-legal-anime.js",
     "update": "https://raw.githubusercontent.com/JamesGITANI/Wave-Shiro-extension-for-me/main/shiru/index.json",

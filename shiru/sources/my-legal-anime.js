@@ -20,32 +20,26 @@ export default new class MyLegalAnime extends AbstractSource {
       data = null
     }
 
-    if (res.status === 401) {
-      throw new Error('Unauthorized')
-    }
-
-    if (res.status === 429) {
-      const retryAfter = data?.retry_after ?? 'unknown'
-      throw new Error('Rate limited. Retry after ' + retryAfter + ' seconds')
-    }
-
-    if (res.status === 400) {
-      throw new Error(data?.message || 'Bad request')
-    }
-
-    if (!res.ok) {
-      throw new Error('HTTP ' + res.status)
-    }
-
-    if (data?.error === true) {
-      throw new Error(data.message || 'API error')
-    }
+    if (res.status === 401) throw new Error('Unauthorized')
+    if (res.status === 429) throw new Error('Rate limited')
+    if (res.status === 400) throw new Error(data?.message || 'Bad request')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    if (data?.error === true) throw new Error(data.message || 'API error')
 
     return data?.data ?? []
   }
 
   normalize(text = '') {
     return String(text).toLowerCase().replace(/[^\w\s-]/g, ' ').trim()
+  }
+
+  getTitles(input) {
+    return [
+      ...(input?.titles || []),
+      input?.media?.title?.english,
+      input?.media?.title?.romaji,
+      input?.media?.title?.native
+    ].filter(Boolean)
   }
 
   parseAudio(item) {
@@ -59,46 +53,27 @@ export default new class MyLegalAnime extends AbstractSource {
     ].filter(Boolean).join(' '))
 
     const eng =
+      blob.includes('english') ||
       blob.includes(' eng ') ||
       blob.startsWith('eng ') ||
       blob.endsWith(' eng') ||
-      blob.includes('english') ||
       blob.includes('dual audio') ||
-      blob.includes('audio_lang en') ||
-      blob.includes('fsub_lang en')
+      String(item.audio_lang || '').includes('en') ||
+      String(item.fsub_lang || '').includes('en')
 
     const jpn =
+      blob.includes('japanese') ||
       blob.includes(' ja ') ||
       blob.startsWith('ja ') ||
       blob.endsWith(' ja') ||
-      blob.includes('japanese') ||
-      blob.includes('audio_lang ja') ||
-      blob.includes('dual audio')
+      blob.includes('dual audio') ||
+      String(item.audio_lang || '').includes('ja')
 
     return {
       eng,
       jpn,
       dual: (eng && jpn) || blob.includes('dual audio')
     }
-  }
-
-  episodeMatches(item, episode) {
-    if (!episode) return true
-
-    const text = this.normalize([
-      item.title,
-      item.auto_title,
-      ...(item.files || []).map(f => f.name || f.path || '')
-    ].join(' '))
-
-    const ep = String(episode).padStart(2, '0')
-
-    return (
-      text.includes('e' + ep) ||
-      text.includes(' ep ' + episode + ' ') ||
-      text.includes(' episode ' + episode + ' ') ||
-      text.includes(' ' + episode + ' ')
-    )
   }
 
   mapTorrent(item) {
@@ -118,47 +93,116 @@ export default new class MyLegalAnime extends AbstractSource {
     }
   }
 
-  async searchByTitle(title, episode) {
+  matchEpisodeFromMedia(media, wantedEpisode) {
+    if (!wantedEpisode || !Array.isArray(media?.episodes)) return []
+
+    return media.episodes
+      .filter(ep =>
+        ep?.episode === wantedEpisode ||
+        ep?.absolute === wantedEpisode
+      )
+      .map(ep => ep.id)
+      .filter(Boolean)
+  }
+
+  async searchMedia(title) {
     const query = this.normalize(title)
     if (!query) return []
 
-    const search = await this.request('/torrents/search?query=' + encodeURIComponent(query))
-    if (!Array.isArray(search)) return []
+    const result = await this.request('/media/search?query=' + encodeURIComponent(query))
+    return Array.isArray(result) ? result : []
+  }
 
-    const detailed = []
+  async getMedia(mediaId) {
+    return await this.request('/media/' + encodeURIComponent(mediaId))
+  }
 
-    for (const row of search.slice(0, 25)) {
-      if (!row?.id) continue
+  async searchTorrents(params) {
+    const qs = new URLSearchParams()
+
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === '') continue
+      qs.set(key, String(value))
+    }
+
+    const result = await this.request('/torrents/search?' + qs.toString())
+    return Array.isArray(result) ? result : []
+  }
+
+  async getTorrent(id) {
+    return await this.request('/torrents/' + encodeURIComponent(id))
+  }
+
+  async searchByTitle(title, episode, wantBatch = false) {
+    const mediaResults = await this.searchMedia(title)
+    if (!mediaResults.length) return []
+
+    const all = []
+
+    for (const mediaRow of mediaResults.slice(0, 5)) {
+      if (!mediaRow?.id) continue
 
       try {
-        const torrent = await this.request('/torrents/' + row.id)
-        if (!torrent?.magnet && !torrent?.private_magnet) continue
-        if (!this.episodeMatches(torrent, episode)) continue
-        detailed.push(this.mapTorrent(torrent))
+        const media = await this.getMedia(mediaRow.id)
+        const episodeIds = this.matchEpisodeFromMedia(media, episode)
+
+        const torrents = await this.searchTorrents({
+          media_id: mediaRow.id,
+          episode_ids: episodeIds.length ? episodeIds.join(',') : undefined,
+          episode_match_any: episodeIds.length ? 'true' : undefined,
+          batch: wantBatch ? 'true' : undefined,
+          sort_by: 'seeders',
+          limit: 25
+        })
+
+        for (const row of torrents) {
+          if (!row?.id) continue
+
+          try {
+            const torrent = await this.getTorrent(row.id)
+            if (!torrent?.magnet && !torrent?.private_magnet) continue
+            all.push(this.mapTorrent(torrent))
+          } catch {
+            // ignore bad torrent detail rows
+          }
+        }
       } catch {
-        // ignore bad torrent rows
+        // ignore bad media rows
       }
     }
 
-    return detailed.sort((a, b) => {
+    const deduped = []
+    const seen = new Set()
+
+    for (const item of all) {
+      const key = item.hash || item.link || item.title
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      deduped.push(item)
+    }
+
+    return deduped.sort((a, b) => {
       const rank = { high: 3, medium: 2, low: 1 }
       return (rank[b.accuracy] - rank[a.accuracy]) || (b.seeders - a.seeders)
     })
   }
 
-  async single({ titles, episode }) {
-    if (!titles?.length) return []
-    return this.searchByTitle(titles[0], episode)
+  async single(options) {
+    const titles = this.getTitles(options)
+    if (!titles.length) return []
+    return this.searchByTitle(titles[0], options?.episode, false)
   }
 
-  async batch({ titles }) {
-    if (!titles?.length) return []
-    return this.searchByTitle(titles[0])
+  async batch(options) {
+    const titles = this.getTitles(options)
+    if (!titles.length) return []
+    return this.searchByTitle(titles[0], undefined, true)
   }
 
-  async movie({ titles }) {
-    if (!titles?.length) return []
-    return this.searchByTitle(titles[0])
+  async movie(options) {
+    const titles = this.getTitles(options)
+    if (!titles.length) return []
+    return this.searchByTitle(titles[0], undefined, false)
   }
 
   async validate() {

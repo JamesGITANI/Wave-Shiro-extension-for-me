@@ -1,0 +1,7 @@
+{
+  "name": "@jamesgitani/shiru-extensions",
+  "version": "1.0.0",
+  "description": "Custom Shiru extension",
+  "license": "MIT",
+  "main": "index.json"
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "wave-shiro-extension",
+    "name": "WaveShiroExtension",
+    "version": "0.1.6",
+    "main": "sources/my-legal-anime",
+    "type": "torrent",
+    "nsfw": false,
+    "description": "Personal Shiru source using nekoBT.",
+    "update": "gh:JamesGITANI/Wave-Shiro-extension-for-me/shiru"
+  }
+]

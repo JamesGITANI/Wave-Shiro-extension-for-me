@@ -20,26 +20,11 @@ export default new class MyLegalAnime extends AbstractSource {
       data = null
     }
 
-    if (res.status === 401) {
-      throw new Error('Unauthorized')
-    }
-
-    if (res.status === 429) {
-      const retryAfter = data?.retry_after ?? 'unknown'
-      throw new Error('Rate limited. Retry after ' + retryAfter + ' seconds')
-    }
-
-    if (res.status === 400) {
-      throw new Error(data?.message || 'Bad request')
-    }
-
-    if (!res.ok) {
-      throw new Error('HTTP ' + res.status)
-    }
-
-    if (data?.error === true) {
-      throw new Error(data.message || 'API error')
-    }
+    if (res.status === 401) throw new Error('Unauthorized')
+    if (res.status === 429) throw new Error('Rate limited')
+    if (res.status === 400) throw new Error(data?.message || 'Bad request')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    if (data?.error === true) throw new Error(data.message || 'API error')
 
     return data?.data ?? []
   }
@@ -59,15 +44,46 @@ export default new class MyLegalAnime extends AbstractSource {
     }
   }
 
+  async getTorrent(id) {
+    return await this.request('/torrents/' + encodeURIComponent(id))
+  }
+
+  async searchTitle(title) {
+    if (!title) return []
+
+    const rows = await this.request('/torrents/search?query=' + encodeURIComponent(title))
+    if (!Array.isArray(rows)) return []
+
+    const results = []
+
+    for (const row of rows.slice(0, 25)) {
+      if (!row?.id) continue
+
+      try {
+        const torrent = await this.getTorrent(row.id)
+        const mapped = this.mapTorrent(torrent)
+        if (mapped.link) results.push(mapped)
+      } catch {
+        // skip broken rows
+      }
+    }
+
+    const deduped = []
+    const seen = new Set()
+
+    for (const item of results) {
+      const key = item.hash || item.link || item.title
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      deduped.push(item)
+    }
+
+    return deduped.sort((a, b) => b.seeders - a.seeders)
+  }
+
   async single({ titles }) {
     if (!titles?.length) return []
-
-    const query = encodeURIComponent(titles[0])
-    const rows = await this.request('/torrents/search?query=' + query)
-
-    return Array.isArray(rows)
-      ? rows.map(row => this.mapTorrent(row)).filter(row => row.link)
-      : []
+    return this.searchTitle(titles[0])
   }
 
   async batch(options) {

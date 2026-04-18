@@ -2,7 +2,7 @@ import AbstractSource from '../../abstract.js'
 
 export default new class MyLegalAnime extends AbstractSource {
   base = 'https://nekobt.to/api/v1'
-  apiKey = 'eyJhbGciOiJIUzI1NiJ9.eyJ1c3IiOiIxMDEwMjg4ODc0NDIyMCIsInZlciI6MSwidHlwIjoxLCJpYXQiOjE3NzUyMjQ0NjcsImV4cCI6MTgwNjc2MDQ2N30.A2s4AiUh507mDDWITvzoZdBPfHzanlzHqCEXL2CO1E8'
+  apiKey = 'eyJhbGciOiJIUzI1NiJ9.eyJ1c3IiOiIxMDEwMjg4ODc0NDIyMCIsInZlciI6MSwidHlwIjoxLCJpYXQiOjE3NzY1Mzg4NzksImV4cCI6MTgwODA3NDg3OX0.AWEkxOu0l0Js9hJm1RP8TiTkULTJYH3WOAz6SGLfu54'
 
   async request(path) {
     const res = await fetch(this.base + path, {
